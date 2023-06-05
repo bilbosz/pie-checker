@@ -7,7 +7,7 @@ A program to check if a given file is an executable file and has the Position In
     module add cmake/latest gcc/10.3.0
     mkdir build
     cd build
-    cmake -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ ..
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ ..
     make
 
 ## Usage

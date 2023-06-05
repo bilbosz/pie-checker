@@ -17,7 +17,7 @@ will be processed in the order they are received from the standard input.
 
 ### Use example
 
-    find * -type f | ./pie-checker
+    find * -type f | ./pie_checker
 
 ### Example output
 

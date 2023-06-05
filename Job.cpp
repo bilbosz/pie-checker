@@ -75,6 +75,57 @@ struct FileInfo {
     bool isPieLinked = false;
 };
 
+std::ostream &operator<<(std::ostream &os, const FileInfo &fi) {
+    switch (fi.type) {
+        case FileInfo::Type::NotElf:
+            os << "not_elf;";
+            break;
+        case FileInfo::Type::ElfRelocatableFile:
+            os << "elf_relocatable_file;";
+            break;
+        case FileInfo::Type::ElfExecutableFile:
+            os << "elf_executable_file;";
+            break;
+        case FileInfo::Type::ElfSharedObject:
+            os << "elf_shared_object;";
+            break;
+        case FileInfo::Type::ElfCoreFile:
+            os << "elf_core_file;";
+            break;
+    }
+    switch (fi.architecture) {
+        case FileInfo::Architecture::None:
+            os << "unknown;";
+            break;
+        case FileInfo::Architecture::X32:
+            os << "32_bit;";
+            break;
+        case FileInfo::Architecture::X64:
+            os << "64_bit;";
+            break;
+    }
+    switch (fi.endianness) {
+        case FileInfo::Endianness::None:
+            os << "unknown;";
+            break;
+        case FileInfo::Endianness::LittleEndian:
+            os << "lsb;";
+            break;
+        case FileInfo::Endianness::BigEndian:
+            os << "msb;";
+            break;
+    }
+    switch (fi.isPieLinked) {
+        case false:
+            os << "not_pie";
+            break;
+        case true:
+            os << "pie";
+            break;
+    }
+    return os;
+}
+
 template<FileInfo::Architecture Arch>
 static FileInfo CheckPieImpl(const char ident[EI_NIDENT], std::ifstream &ifs) {
     FileInfo fileInfo = {};
@@ -146,6 +197,6 @@ void Job(const std::string &file) {
     auto fileInfo = CheckPie(file);
     if (fileInfo.type != FileInfo::Type::NotElf) {
         std::lock_guard lock(ioMutex);
-        std::cout << "\"" << file << "\" is " << (fileInfo.isPieLinked ? "PIE" : "not PIE") << std::endl;
+        std::cout << file << ";" << fileInfo << '\n';
     }
 }

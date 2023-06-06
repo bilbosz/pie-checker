@@ -122,11 +122,15 @@ std::ostream &operator<<(std::ostream &os, const FileInfo &fi) {
 
 template<std::integral T>
 constexpr T ByteSwap(T value) noexcept {
+#ifdef __cpp_lib_byteswap
+    return std::byteswap(value);
+#else
     auto bytes = reinterpret_cast<char *>(&value);
     for (int i = 0; i < sizeof(value) / 2; ++i) {
         std::swap(bytes[i], bytes[sizeof(value) - 1 - i]);
     }
     return *reinterpret_cast<T *>(bytes);
+#endif
 }
 
 template<FileInfo::Endianness fileInfoEndian, std::integral T>

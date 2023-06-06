@@ -1,7 +1,6 @@
 #include "WorkerManager.h"
 
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 
 #include <unistd.h>

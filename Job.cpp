@@ -116,14 +116,7 @@ std::ostream &operator<<(std::ostream &os, const FileInfo &fi) {
             os << "msb;";
             break;
     }
-    switch (fi.isPieLinked) {
-        case false:
-            os << "not_pie";
-            break;
-        case true:
-            os << "pie";
-            break;
-    }
+    os << (fi.isPieLinked ? "pie" : "not_pie");
     return os;
 }
 
@@ -137,9 +130,9 @@ constexpr T ByteSwap(T value) noexcept {
 }
 
 template<FileInfo::Endianness fileInfoEndian, std::integral T>
-T ByteSwapIfNeeded(T value)
-{
-    constexpr auto fileEndian = (fileInfoEndian == FileInfo::Endianness::LittleEndian ? std::endian::little : std::endian::big);
+T ByteSwapIfNeeded(T value) {
+    constexpr auto fileEndian = (fileInfoEndian == FileInfo::Endianness::LittleEndian ? std::endian::little
+                                                                                      : std::endian::big);
     if constexpr (std::endian::native != fileEndian)
         return ByteSwap(value);
     return value;
@@ -160,8 +153,8 @@ static FileInfo CheckPieImpl(const char ident[EI_NIDENT], std::ifstream &ifs) {
     fileInfo.version = static_cast<FileInfo::Version>(elfHeader.e_ident[EI_VERSION]);
     fileInfo.osAbi = static_cast<FileInfo::OsAbi>(elfHeader.e_ident[EI_OSABI]);
     fileInfo.abiVersion = elfHeader.e_ident[EI_ABIVERSION];
-    fileInfo.type = static_cast<FileInfo::Type>(elfHeader.e_type);
-    fileInfo.machine = static_cast<FileInfo::Machine>(elfHeader.e_machine);
+    fileInfo.type = static_cast<FileInfo::Type>(S(elfHeader.e_type));
+    fileInfo.machine = static_cast<FileInfo::Machine>(S(elfHeader.e_machine));
 
     for (int i = 0; i < S(elfHeader.e_shnum); ++i) {
         if (!ifs.seekg(S(elfHeader.e_shoff) + i * S(elfHeader.e_shentsize)))

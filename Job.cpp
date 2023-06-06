@@ -4,6 +4,7 @@
 
 #include "Job.h"
 
+#include <bit>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -126,11 +127,30 @@ std::ostream &operator<<(std::ostream &os, const FileInfo &fi) {
     return os;
 }
 
-template<FileInfo::Architecture Arch>
+template<std::integral T>
+constexpr T ByteSwap(T value) noexcept {
+    auto bytes = reinterpret_cast<char *>(&value);
+    for (int i = 0; i < sizeof(value) / 2; ++i) {
+        std::swap(bytes[i], bytes[sizeof(value) - 1 - i]);
+    }
+    return *reinterpret_cast<T *>(bytes);
+}
+
+template<FileInfo::Endianness fileInfoEndian, std::integral T>
+T ByteSwapIfNeeded(T value)
+{
+    constexpr auto fileEndian = (fileInfoEndian == FileInfo::Endianness::LittleEndian ? std::endian::little : std::endian::big);
+    if constexpr (std::endian::native != fileEndian)
+        return ByteSwap(value);
+    return value;
+}
+
+template<FileInfo::Architecture arch, FileInfo::Endianness endian>
 static FileInfo CheckPieImpl(const char ident[EI_NIDENT], std::ifstream &ifs) {
+#define S(x) ByteSwapIfNeeded<endian>(x)
     FileInfo fileInfo = {};
 
-    using Ehdr = std::conditional_t<Arch == FileInfo::Architecture::X32, Elf32_Ehdr, Elf64_Ehdr>;
+    using Ehdr = std::conditional_t<arch == FileInfo::Architecture::X32, Elf32_Ehdr, Elf64_Ehdr>;
     Ehdr elfHeader;
     memcpy((void *) &elfHeader, ident, EI_NIDENT);
     if (!ifs.read(reinterpret_cast<char *>(&elfHeader) + EI_NIDENT, sizeof(elfHeader) - EI_NIDENT))
@@ -143,25 +163,25 @@ static FileInfo CheckPieImpl(const char ident[EI_NIDENT], std::ifstream &ifs) {
     fileInfo.type = static_cast<FileInfo::Type>(elfHeader.e_type);
     fileInfo.machine = static_cast<FileInfo::Machine>(elfHeader.e_machine);
 
-    for (int i = 0; i < elfHeader.e_shnum; ++i) {
-        if (!ifs.seekg(elfHeader.e_shoff + i * elfHeader.e_shentsize))
+    for (int i = 0; i < S(elfHeader.e_shnum); ++i) {
+        if (!ifs.seekg(S(elfHeader.e_shoff) + i * S(elfHeader.e_shentsize)))
             return {};
-        using Shdr = std::conditional_t<Arch == FileInfo::Architecture::X32, Elf32_Shdr, Elf64_Shdr>;
+        using Shdr = std::conditional_t<arch == FileInfo::Architecture::X32, Elf32_Shdr, Elf64_Shdr>;
         Shdr sectionHeader;
         if (!ifs.read(reinterpret_cast<char *>(&sectionHeader), sizeof(sectionHeader)))
             return {};
-        if (sectionHeader.sh_type == SHT_DYNAMIC) {
-            if (!ifs.seekg(sectionHeader.sh_offset))
+        if (S(sectionHeader.sh_type) == SHT_DYNAMIC) {
+            if (!ifs.seekg(S(sectionHeader.sh_offset)))
                 return {};
             // dynamic section header
-            using Dyn = std::conditional_t<Arch == FileInfo::Architecture::X32, Elf32_Dyn, Elf64_Dyn>;
+            using Dyn = std::conditional_t<arch == FileInfo::Architecture::X32, Elf32_Dyn, Elf64_Dyn>;
             Dyn dynamicSectionHeader;
             if (!ifs.read(reinterpret_cast<char *>(&dynamicSectionHeader), sizeof(dynamicSectionHeader)))
                 return {};
-            for (decltype(dynamicSectionHeader.d_tag) tag = dynamicSectionHeader.d_tag;
-                 tag != DT_NULL; tag = dynamicSectionHeader.d_tag) {
+            for (decltype(dynamicSectionHeader.d_tag) tag = S(dynamicSectionHeader.d_tag);
+                 tag != DT_NULL; tag = S(dynamicSectionHeader.d_tag)) {
                 if (tag == DT_FLAGS_1) {
-                    if (dynamicSectionHeader.d_un.d_val & DF_1_PIE) {
+                    if (S(dynamicSectionHeader.d_un.d_val) & DF_1_PIE) {
                         fileInfo.isPieLinked = true;
                         return fileInfo;
                     }
@@ -171,8 +191,8 @@ static FileInfo CheckPieImpl(const char ident[EI_NIDENT], std::ifstream &ifs) {
             }
         }
     }
-
     return fileInfo;
+#undef S
 }
 
 static FileInfo CheckPie(const std::string &filename) {
@@ -182,11 +202,25 @@ static FileInfo CheckPie(const std::string &filename) {
         return {};
     if (!std::equal(ident, ident + SELFMAG, ELFMAG))
         return {};
-    switch (ident[EI_CLASS]) {
-        case ELFCLASS32:
-            return CheckPieImpl<FileInfo::Architecture::X32>(ident, ifs);
-        case ELFCLASS64:
-            return CheckPieImpl<FileInfo::Architecture::X64>(ident, ifs);
+    switch (ident[EI_DATA]) {
+        case ELFDATA2LSB:
+            switch (ident[EI_CLASS]) {
+                case ELFCLASS32:
+                    return CheckPieImpl<FileInfo::Architecture::X32, FileInfo::Endianness::LittleEndian>(ident, ifs);
+                case ELFCLASS64:
+                    return CheckPieImpl<FileInfo::Architecture::X64, FileInfo::Endianness::LittleEndian>(ident, ifs);
+                default:
+                    return {};
+            }
+        case ELFDATA2MSB:
+            switch (ident[EI_CLASS]) {
+                case ELFCLASS32:
+                    return CheckPieImpl<FileInfo::Architecture::X32, FileInfo::Endianness::BigEndian>(ident, ifs);
+                case ELFCLASS64:
+                    return CheckPieImpl<FileInfo::Architecture::X64, FileInfo::Endianness::BigEndian>(ident, ifs);
+                default:
+                    return {};
+            }
     }
     return {};
 }
@@ -195,8 +229,6 @@ static std::mutex ioMutex;
 
 void Job(const std::string &file) {
     auto fileInfo = CheckPie(file);
-    if (fileInfo.type != FileInfo::Type::NotElf) {
-        std::lock_guard lock(ioMutex);
-        std::cout << file << ";" << fileInfo << '\n';
-    }
+    std::lock_guard lock(ioMutex);
+    std::cout << file << ";" << fileInfo << '\n';
 }

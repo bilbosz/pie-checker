@@ -31,5 +31,3 @@ will be processed in the order they are received from the standard input.
     CMakeFiles/3.22.1/CompilerIdCXX/a.out;elf_shared_object;64_bit;lsb;pie
     CMakeFiles/3.22.1/CMakeDetermineCompilerABI_CXX.bin;elf_shared_object;64_bit;lsb;pie
     pie_checker;elf_shared_object;64_bit;lsb;pie
-    
-    
